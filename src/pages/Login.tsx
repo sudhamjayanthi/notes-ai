@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { AuthLayout } from "@/components/auth/AuthLayout";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
+import { supabase } from "@/integrations/supabase/client";
+import { Eye, EyeOff } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -14,27 +17,29 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
     try {
-      // In a real app, this would use Supabase auth
-      console.log("Login with:", email, password);
-      
-      // Mock successful login
-      setTimeout(() => {
-        toast({
-          title: "Login successful",
-          description: "Welcome back to NoteScribe AI!",
-        });
-        navigate("/dashboard");
-      }, 1000);
-    } catch (error) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Welcome back!",
+        description: "Successfully logged in to NoteScribe AI.",
+      });
+      navigate("/dashboard");
+    } catch (error: any) {
       toast({
         title: "Login failed",
-        description: "Please check your credentials and try again.",
+        description: error.message || "Please check your credentials and try again.",
         variant: "destructive",
       });
     } finally {
@@ -42,21 +47,13 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    // In a real app, this would trigger Google OAuth
-    toast({
-      title: "Google login",
-      description: "This feature would use Supabase Google OAuth.",
-    });
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-muted/40">
-      <Card className="w-full max-w-md">
+    <AuthLayout>
+      <Card className="border-2">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Login</CardTitle>
+          <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
           <CardDescription>
-            Enter your email and password to access your notes
+            Enter your email to sign in to your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -66,74 +63,72 @@ const Login = () => {
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="name@example.com" 
+                placeholder="m@example.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="border-2"
               />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <a 
-                  href="#" 
-                  className="text-sm font-medium text-primary hover:underline"
+                <Button 
+                  variant="link" 
+                  className="px-0 text-xs"
                   onClick={(e) => {
                     e.preventDefault();
                     toast({
                       title: "Reset password",
-                      description: "Password reset functionality would be implemented here.",
+                      description: "Check your email for a password reset link.",
                     });
                   }}
                 >
                   Forgot password?
-                </a>
+                </Button>
               </div>
-              <Input 
-                id="password" 
-                type="password" 
-                placeholder="••••••••" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input 
+                  id="password" 
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="border-2 pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
+              {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
           
-          <div className="flex items-center my-4">
-            <Separator className="flex-grow" />
-            <span className="mx-4 text-muted-foreground text-sm">OR</span>
-            <Separator className="flex-grow" />
-          </div>
-          
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={handleGoogleLogin}
-          >
-            Continue with Google
-          </Button>
+          <OAuthButtons />
         </CardContent>
         <CardFooter>
           <p className="text-sm text-muted-foreground text-center w-full">
             Don't have an account?{" "}
-            <a 
-              href="#" 
-              className="text-primary font-medium hover:underline"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate("/signup");
-              }}
+            <Button 
+              variant="link" 
+              className="p-0"
+              onClick={() => navigate("/signup")}
             >
               Sign up
-            </a>
+            </Button>
           </p>
         </CardFooter>
       </Card>
-    </div>
+    </AuthLayout>
   );
 };
 
