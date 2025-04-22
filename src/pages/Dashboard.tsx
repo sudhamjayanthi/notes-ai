@@ -1,68 +1,108 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PlusIcon, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { NoteCard } from "@/components/NoteCard";
 import { useToast } from "@/hooks/use-toast";
-import { Note } from "@/types/note";
-
-// Sample notes data - in a real app, this would come from Supabase
-const initialNotes: Note[] = [
-  {
-    id: "1",
-    title: "Meeting Notes",
-    content: "Discussed project timeline and resource allocation. Need to follow up with the design team on UI mockups. Set next meeting for Friday to review progress.",
-    summary: "Project timeline discussion, UI mockup follow-up needed, next meeting Friday.",
-    createdAt: new Date("2023-04-10").toISOString(),
-    updatedAt: new Date("2023-04-10").toISOString(),
-  },
-  {
-    id: "2",
-    title: "Product Ideas",
-    content: "New feature suggestions: 1) Dark mode 2) Export to PDF 3) Collaboration tools 4) Mobile app integration. Need to prioritize based on user feedback and development resources.",
-    summary: "Feature ideas: dark mode, PDF export, collaboration tools, mobile integration. Prioritize based on feedback.",
-    createdAt: new Date("2023-04-08").toISOString(),
-    updatedAt: new Date("2023-04-09").toISOString(),
-  },
-  {
-    id: "3",
-    title: "Learning Resources",
-    content: "Useful TypeScript resources: 1) TypeScript Handbook 2) Matt Pocock's tutorials 3) TypeScript Deep Dive book. Make time to go through these materials to improve TS skills.",
-    summary: "TypeScript resources: handbook, tutorials by Matt Pocock, Deep Dive book.",
-    createdAt: new Date("2023-04-05").toISOString(),
-    updatedAt: new Date("2023-04-05").toISOString(),
-  }
-];
+import { supabase } from "@/integrations/supabase/client";
+import type { Note } from "@/types/note";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredNotes = notes.filter(note => 
-    note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    note.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const { data: notesData, error } = await supabase
+          .from('notes')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setNotes(notesData || []);
+      } catch (error: any) {
+        toast({
+          title: "Error loading notes",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+
+    // Subscribe to real-time changes
+    const channel = supabase
+      .channel('notes_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notes' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setNotes(current => [payload.new as Note, ...current]);
+          } else if (payload.eventType === 'DELETE') {
+            setNotes(current => current.filter(note => note.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setNotes(current =>
+              current.map(note =>
+                note.id === payload.new.id ? { ...note, ...payload.new } : note
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast]);
 
   const handleCreateNote = () => {
     navigate("/notes/new");
   };
 
-  const handleDeleteNote = (id: string) => {
-    setNotes(notes.filter(note => note.id !== id));
-    toast({
-      title: "Note deleted",
-      description: "Your note has been deleted successfully.",
-    });
+  const handleDeleteNote = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Note deleted",
+        description: "Your note has been deleted successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error deleting note",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
+
+  const filteredNotes = notes.filter(note => 
+    note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    note.content?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-3xl font-bold">My Notes</h1>
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-500 to-indigo-500 bg-clip-text text-transparent">
+          My Notes
+        </h1>
         <div className="flex w-full md:w-auto gap-4">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -73,20 +113,34 @@ const Dashboard = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button onClick={handleCreateNote}>
+          <Button 
+            onClick={handleCreateNote}
+            className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600"
+          >
             <PlusIcon className="h-4 w-4 mr-2" />
             New Note
           </Button>
         </div>
       </div>
 
-      {filteredNotes.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="animate-pulse">
+              <div className="h-48 bg-muted rounded-lg"></div>
+            </div>
+          ))}
+        </div>
+      ) : filteredNotes.length === 0 ? (
         <div className="text-center py-12">
           <h3 className="text-lg font-medium text-muted-foreground mb-2">No notes found</h3>
           <p className="text-sm text-muted-foreground mb-4">
             {searchQuery ? "Try a different search term or" : "Get started by"} creating your first note
           </p>
-          <Button onClick={handleCreateNote}>
+          <Button 
+            onClick={handleCreateNote}
+            className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600"
+          >
             <PlusIcon className="h-4 w-4 mr-2" />
             Create Note
           </Button>
