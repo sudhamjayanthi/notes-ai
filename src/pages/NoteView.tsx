@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +20,15 @@ const NoteView = () => {
     const fetchNote = async () => {
       setLoading(true);
       try {
-        if (!id) throw new Error("Note ID is required");
+        if (!id) {
+          toast({
+            title: "Note ID is missing",
+            description: "Cannot load note without an ID.",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
+          return;
+        }
         
         const { data, error } = await supabase
           .from('notes')
@@ -48,6 +57,7 @@ const NoteView = () => {
           navigate("/dashboard");
         }
       } catch (error: any) {
+        console.error("Error loading note:", error);
         toast({
           title: "Error loading note",
           description: error.message,

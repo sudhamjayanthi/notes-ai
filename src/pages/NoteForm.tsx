@@ -31,6 +31,16 @@ const NoteForm = () => {
       }
 
       try {
+        if (!id) {
+          toast({
+            title: "Note ID is missing",
+            description: "Cannot load note without an ID.",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
+          return;
+        }
+
         const { data: note, error } = await supabase
           .from('notes')
           .select('*')
@@ -43,8 +53,16 @@ const NoteForm = () => {
           setTitle(note.title);
           setContent(note.content || '');
           setSummary(note.summary || '');
+        } else {
+          toast({
+            title: "Note not found",
+            description: "The requested note could not be found.",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
         }
       } catch (error: any) {
+        console.error("Error loading note:", error);
         toast({
           title: "Error loading note",
           description: error.message,
