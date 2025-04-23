@@ -124,11 +124,23 @@ const NoteForm = () => {
 
     setLoading(true);
     try {
+      const user = (await supabase.auth.getUser()).data.user;
+      
+      if (!user) {
+        toast({
+          title: "Authentication required",
+          description: "You must be logged in to save notes.",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
+      
       const noteData = {
         title,
         content,
         summary,
-        user_id: (await supabase.auth.getUser()).data.user?.id
+        user_id: user.id
       };
 
       if (isNewNote) {
