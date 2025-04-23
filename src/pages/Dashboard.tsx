@@ -25,7 +25,18 @@ const Dashboard = () => {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setNotes(notesData || []);
+        
+        // Map the snake_case DB fields to camelCase for our app
+        const mappedNotes: Note[] = (notesData || []).map(note => ({
+          id: note.id,
+          title: note.title,
+          content: note.content || '',
+          summary: note.summary || '',
+          createdAt: note.created_at,
+          updatedAt: note.updated_at
+        }));
+        
+        setNotes(mappedNotes);
       } catch (error: any) {
         toast({
           title: "Error loading notes",
@@ -47,13 +58,31 @@ const Dashboard = () => {
         { event: '*', schema: 'public', table: 'notes' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setNotes(current => [payload.new as Note, ...current]);
+            const newNote = payload.new as any;
+            const mappedNote: Note = {
+              id: newNote.id,
+              title: newNote.title,
+              content: newNote.content || '',
+              summary: newNote.summary || '',
+              createdAt: newNote.created_at,
+              updatedAt: newNote.updated_at
+            };
+            setNotes(current => [mappedNote, ...current]);
           } else if (payload.eventType === 'DELETE') {
             setNotes(current => current.filter(note => note.id !== payload.old.id));
           } else if (payload.eventType === 'UPDATE') {
+            const updatedNote = payload.new as any;
+            const mappedNote: Note = {
+              id: updatedNote.id,
+              title: updatedNote.title,
+              content: updatedNote.content || '',
+              summary: updatedNote.summary || '',
+              createdAt: updatedNote.created_at,
+              updatedAt: updatedNote.updated_at
+            };
             setNotes(current =>
               current.map(note =>
-                note.id === payload.new.id ? { ...note, ...payload.new } : note
+                note.id === mappedNote.id ? mappedNote : note
               )
             );
           }

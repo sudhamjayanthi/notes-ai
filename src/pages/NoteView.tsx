@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -7,34 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Edit } from "lucide-react";
 import { Note } from "@/types/note";
-
-// Sample notes data - in a real app, this would come from Supabase
-const sampleNotes: Record<string, Note> = {
-  "1": {
-    id: "1",
-    title: "Meeting Notes",
-    content: "Discussed project timeline and resource allocation. Need to follow up with the design team on UI mockups. Set next meeting for Friday to review progress.",
-    summary: "Project timeline discussion, UI mockup follow-up needed, next meeting Friday.",
-    createdAt: new Date("2023-04-10").toISOString(),
-    updatedAt: new Date("2023-04-10").toISOString(),
-  },
-  "2": {
-    id: "2",
-    title: "Product Ideas",
-    content: "New feature suggestions: 1) Dark mode 2) Export to PDF 3) Collaboration tools 4) Mobile app integration. Need to prioritize based on user feedback and development resources.",
-    summary: "Feature ideas: dark mode, PDF export, collaboration tools, mobile integration. Prioritize based on feedback.",
-    createdAt: new Date("2023-04-08").toISOString(),
-    updatedAt: new Date("2023-04-09").toISOString(),
-  },
-  "3": {
-    id: "3",
-    title: "Learning Resources",
-    content: "Useful TypeScript resources: 1) TypeScript Handbook 2) Matt Pocock's tutorials 3) TypeScript Deep Dive book. Make time to go through these materials to improve TS skills.",
-    summary: "TypeScript resources: handbook, tutorials by Matt Pocock, Deep Dive book.",
-    createdAt: new Date("2023-04-05").toISOString(),
-    updatedAt: new Date("2023-04-05").toISOString(),
-  }
-};
+import { supabase } from "@/integrations/supabase/client";
 
 const NoteView = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,12 +16,29 @@ const NoteView = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, this would fetch from Supabase
-    const fetchNote = () => {
+    const fetchNote = async () => {
       setLoading(true);
       try {
-        if (id && sampleNotes[id]) {
-          setNote(sampleNotes[id]);
+        if (!id) throw new Error("Note ID is required");
+        
+        const { data, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        
+        if (data) {
+          // Map the snake_case DB fields to camelCase for our app
+          setNote({
+            id: data.id,
+            title: data.title,
+            content: data.content || '',
+            summary: data.summary || '',
+            createdAt: data.created_at,
+            updatedAt: data.updated_at
+          });
         } else {
           toast({
             title: "Note not found",
@@ -58,12 +47,13 @@ const NoteView = () => {
           });
           navigate("/dashboard");
         }
-      } catch (error) {
+      } catch (error: any) {
         toast({
           title: "Error loading note",
-          description: "There was a problem loading the note.",
+          description: error.message,
           variant: "destructive",
         });
+        navigate("/dashboard");
       } finally {
         setLoading(false);
       }
