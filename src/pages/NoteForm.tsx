@@ -19,63 +19,77 @@ const NoteForm = () => {
   const [summary, setSummary] = useState("");
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(id !== "new");
+  const [initialLoading, setInitialLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
+  // Determine if we're creating a new note or editing an existing one
   const isNewNote = id === "new";
 
+  // Check authentication first
   useEffect(() => {
-    const fetchNote = async () => {
-      if (isNewNote) {
-        setInitialLoading(false);
+    const checkAuth = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      
+      if (error || !data.user) {
+        toast({
+          title: "Authentication required",
+          description: "You must be logged in to manage notes.",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
+      
+      setCheckingAuth(false);
+      
+      // Only set initial loading if we're fetching an existing note
+      if (!isNewNote) {
+        setInitialLoading(true);
+        fetchNote();
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
+  const fetchNote = async () => {
+    try {
+      if (!id || isNewNote) {
         return;
       }
 
-      try {
-        if (!id) {
-          toast({
-            title: "Note ID is missing",
-            description: "Cannot load note without an ID.",
-            variant: "destructive",
-          });
-          navigate("/dashboard");
-          return;
-        }
+      const { data: note, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-        const { data: note, error } = await supabase
-          .from('notes')
-          .select('*')
-          .eq('id', id)
-          .single();
+      if (error) throw error;
 
-        if (error) throw error;
-
-        if (note) {
-          setTitle(note.title);
-          setContent(note.content || '');
-          setSummary(note.summary || '');
-        } else {
-          toast({
-            title: "Note not found",
-            description: "The requested note could not be found.",
-            variant: "destructive",
-          });
-          navigate("/dashboard");
-        }
-      } catch (error: any) {
-        console.error("Error loading note:", error);
+      if (note) {
+        setTitle(note.title);
+        setContent(note.content || '');
+        setSummary(note.summary || '');
+      } else {
         toast({
-          title: "Error loading note",
-          description: error.message,
+          title: "Note not found",
+          description: "The requested note could not be found.",
           variant: "destructive",
         });
         navigate("/dashboard");
-      } finally {
-        setInitialLoading(false);
       }
-    };
-
-    fetchNote();
-  }, [id, isNewNote, navigate, toast]);
+    } catch (error: any) {
+      console.error("Error loading note:", error);
+      toast({
+        title: "Error loading note",
+        description: error.message,
+        variant: "destructive",
+      });
+      navigate("/dashboard");
+    } finally {
+      setInitialLoading(false);
+    }
+  };
 
   const generateSummary = async () => {
     if (!content.trim()) {
@@ -124,9 +138,10 @@ const NoteForm = () => {
 
     setLoading(true);
     try {
-      const user = (await supabase.auth.getUser()).data.user;
+      // Get the current authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
       
-      if (!user) {
+      if (authError || !user) {
         toast({
           title: "Authentication required",
           description: "You must be logged in to save notes.",
@@ -144,16 +159,18 @@ const NoteForm = () => {
       };
 
       if (isNewNote) {
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from('notes')
           .insert([noteData]);
-        if (error) throw error;
+          
+        if (insertError) throw insertError;
       } else {
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from('notes')
           .update({ ...noteData, updated_at: new Date().toISOString() })
           .eq('id', id);
-        if (error) throw error;
+          
+        if (updateError) throw updateError;
       }
 
       toast({
@@ -165,6 +182,7 @@ const NoteForm = () => {
 
       navigate("/dashboard");
     } catch (error: any) {
+      console.error("Error saving note:", error);
       toast({
         title: "Error saving note",
         description: error.message,
@@ -174,6 +192,14 @@ const NoteForm = () => {
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="container mx-auto p-4 max-w-4xl flex items-center justify-center h-[50vh]">
+        <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (initialLoading) {
     return (
